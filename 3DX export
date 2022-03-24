@@ -1,0 +1,719 @@
+Public Export_Macro_lokacija1 As String
+Public Export_Macro_boolean1 As Boolean
+Public Export_Macro_boolean2 As Boolean
+
+Sub CATMain()
+
+    Export_Macro_boolean1 = False
+    Export_Macro_boolean2 = False
+    Export_Macro_lokacija1 = ""
+
+    Export_form.Show
+    
+    If Export_Macro_lokacija1 = "" Then
+        Exit Sub
+    End If
+    If Export_Macro_boolean2 Then
+        Exit Sub
+    End If
+    
+
+    MYPath = Export_Macro_lokacija1
+    
+    Set oVPMRootOccOnRoot = RootOccFromEditor()
+  
+    ' 'Debug.Print oVPMRootOccOnRoot.Name
+    ' Debug.Print oVPMRootOccOnRoot.PLMEntity.GetAttributeValue("V_Name")
+    ' Debug.Print oVPMRootOccOnRoot.PLMEntity.GetAttributeValue("RACERPCode") ' WORKS!
+    
+    FileCopy "S:\Manufacturing Engineering\External\Macro_template\MIS_OUTPUT_TEMPLATE.xlsx", MYPath & "\MIS_OUTPUT_TEMPLATE.xlsx"
+    
+    Set wb_edit = Workbooks.Open(MYPath & "\MIS_OUTPUT_TEMPLATE.xlsx")
+    
+    'Dim wb_edit As Workbook
+    'Set wb_edit = Create_Excel(MYPath, oVPMRootOccOnRoot)
+    
+    Dim ws_edit As Worksheet
+    Set ws_edit = wb_edit.Worksheets(1)
+    If Not Export_Macro_boolean1 Then
+        Export_png_and_step oVPMRootOccOnRoot.PLMEntity, False, MYPath
+    End If
+    C_N = title_from_ref(oVPMRootOccOnRoot.PLMEntity)
+    
+    If InStr(C_N, "/") > 0 Or InStr(C_N, "\") > 0 Then
+        MsgBox "Name cannot contain / or \ characters. Please rename title."
+        Exit Sub
+    End If
+    
+    ERP_NO = erp_no_from_ref(oVPMRootOccOnRoot.PLMEntity)
+    LastRow = ws_edit.Cells(Rows.Count, 1).End(xlUp).Offset(1).Row
+    
+    NOVI_UPIS wb_edit, 1, 1, C_N, oVPMRootOccOnRoot.PLMEntity.GetAttributeValue("RACERPCode"), ERP_NO, _
+                oVPMRootOccOnRoot.PLMEntity.GetAttributeValue("RACMaterial"), oVPMRootOccOnRoot.PLMEntity.GetAttributeValue("RACProdWeight"), _
+                oVPMRootOccOnRoot.PLMEntity.GetAttributeValue("V_description"), LastRow
+    
+    Dim unikati1 As New Collection
+    unikati1.Add (oVPMRootOccOnRoot.PLMEntity.GetAttributeValue("PLM_ExternalID"))
+    Dim unikati2 As New Collection
+    unikati2.Add (oVPMRootOccOnRoot.PLMEntity.GetAttributeValue("PLM_ExternalID"))
+    Set unikati = Search_Occ_2(unikati1, unikati2, oVPMRootOccOnRoot, wb_edit, 2, MYPath)
+    edit_excel wb_edit
+    
+    Set oVPMRootOccOnRoot = Nothing
+    wb_edit.Save
+    wb_edit.Close
+    Name MYPath & "\MIS_OUTPUT_TEMPLATE.xlsx" As MYPath & "\" & C_N & ".xlsx"
+    MsgBox "Done ! "
+End Sub
+    
+Function Search_Occ_2(ByVal unikati_za_BOM As Collection, ByVal unikati_za_export As Collection, ByVal input_Occ As VPMOccurrence, ByVal editing_wb As Workbook, _
+                            ByVal razina1 As Integer, ByVal MYPath As String) As Collection
+    'Debug.Print TypeName(oVPMRootOccOnRoot.Occurrences.Item(1)) '=> VPMOccurrence
+    For i = 1 To input_Occ.Occurrences.Count    ' AKO PRODUCT IMA 3DShape ispod, nece ga naci!
+        ' Dohvaca Instance!
+        'Debug.Print oVPMRootOccOnRoot.Occurrences.Item(i).PLMEntity.GetAttributeValue("V_Name") ' DOES NOT WORK
+        'Debug.Print oVPMRootOccOnRoot.Occurrences.Item(i).PLMEntity.GetAttributeValue("RACERPCode") ' DOES NOT WORK
+        
+        Dim VPMOcc As VPMOccurrence
+        Set VPMOcc = input_Occ.Occurrences.Item(i)
+        
+        Dim VPMInst As VPMInstance
+        Set VPMInst = VPMOcc.InstanceOccurrenceOf
+        
+        Dim VPMRef As VPMReference
+        Set VPMRef = VPMInst.ReferenceInstanceOf
+        
+        Dim rev As String
+        ERP_NO = erp_no_from_ref(VPMRef)
+        
+        Dim Correct_Name As String
+        Correct_Name = title_from_ref(VPMRef)
+        
+        LastRow = editing_wb.Worksheets(1).Cells(Rows.Count, 1).End(xlUp).Offset(1).Row
+        no = editing_wb.Worksheets(1).Cells(LastRow - 1, 1).Value
+
+        If InCollection(unikati_za_BOM, VPMRef.GetAttributeValue("PLM_ExternalID")) = False Then
+            unikati_za_BOM.Add (VPMRef.GetAttributeValue("PLM_ExternalID"))
+            no = no + 1
+            NOVI_UPIS editing_wb, no, razina1, Correct_Name, VPMRef.GetAttributeValue("RACERPCode"), ERP_NO, _
+                VPMRef.GetAttributeValue("RACMaterial"), VPMRef.GetAttributeValue("RACProdWeight"), VPMRef.GetAttributeValue("V_description"), LastRow
+            
+            If (VPMOcc.Occurrences.Count > 0 And VPMRef.GetAttributeValue("RACERPCode") = "") Then
+                If Not Export_Macro_boolean1 Then
+                    If InCollection(unikati_za_export, VPMRef.GetAttributeValue("PLM_ExternalID")) = False Then
+                        unikati_za_export.Add (VPMRef.GetAttributeValue("PLM_ExternalID"))
+                        Export_png_and_step VPMRef, True, MYPath
+                    End If
+                End If
+                Dim unikati_za_BOM_2 As New Collection
+                unikati_za_BOM_2.Add (VPMRef.GetAttributeValue("PLM_ExternalID"))
+                Dim razina2 As Integer
+                razina2 = razina1 + 1
+                Set unikati_za_export = Search_Occ_2(unikati_za_BOM_2, unikati_za_export, VPMOcc, editing_wb, razina2, MYPath)
+            Else:
+                If VPMRef.GetAttributeValue("RACERPCode") = "" Then
+                    
+                    If Not Export_Macro_boolean1 Then
+                        If InCollection(unikati_za_export, VPMRef.GetAttributeValue("PLM_ExternalID")) = False Then
+                            unikati_za_export.Add (VPMRef.GetAttributeValue("PLM_ExternalID"))
+                            Export_png_and_step VPMRef, True, MYPath
+                        End If
+                    End If
+                    
+                Else:
+                    NOVI_UPIS editing_wb, no, razina1, Correct_Name, VPMRef.GetAttributeValue("RACERPCode"), ERP_NO, _
+                        VPMRef.GetAttributeValue("RACMaterial"), VPMRef.GetAttributeValue("RACProdWeight"), VPMRef.GetAttributeValue("V_description"), LastRow
+                    'editing_wb.Worksheets(1).Cells(LastRow, 4).Value = VPMRef.GetAttributeValue("RACERPCode")
+                End If
+            End If
+        Else:
+            For j = 7 To LastRow
+                If (editing_wb.Worksheets(1).Cells(j, 3).Value = Correct_Name And editing_wb.Worksheets(1).Cells(j, 2).Value = razina1) Then
+                        editing_wb.Worksheets(1).Cells(j, 6).Value = editing_wb.Worksheets(1).Cells(j, 6).Value + 1
+                End If
+            
+                
+            Next j
+        End If
+    Next i
+    
+    Set Search_Occ_2 = unikati_za_export
+    
+End Function
+
+Sub NOVI_UPIS(ByVal editing_wb As Workbook, ByVal no As Integer, ByVal razina1 As Integer, ByVal Correct_Name As String, ByVal racerpcode As String, _
+                            ByVal ERP_NO As String, ByVal MATERIAL As String, ByVal WEIGHT As String, ByVal DESCRIPTION As String, ByVal LastRow As Integer)
+    
+    
+    editing_wb.Worksheets(1).Cells(LastRow, 1).Value = no
+    editing_wb.Worksheets(1).Cells(LastRow, 2).Value = razina1
+    editing_wb.Worksheets(1).Cells(LastRow, 3).Value = Correct_Name
+    If Not racerpcode = "" Then
+        If VBA.Left(ERP_NO, 1) = "s" Then
+            ERP_NO = ERP_NO
+        Else
+            ERP_NO = racerpcode
+        End If
+  
+    End If
+    
+    Dim ERP_NO_ID As String
+    Dim ERP_NO_REV As String
+    
+    If InStr(ERP_NO, "-") > 0 Then
+        ERP_NO_ID = Split(ERP_NO, "-")(0)
+        ERP_NO_REV = Split(ERP_NO, "-")(1)
+    Else
+        ERP_NO_ID = ERP_NO
+        ERP_NO_REV = "_"
+    End If
+        
+    editing_wb.Worksheets(1).Cells(LastRow, 4).NumberFormat = "000000000"
+    editing_wb.Worksheets(1).Cells(LastRow, 4).Value = ERP_NO_ID
+    editing_wb.Worksheets(1).Cells(LastRow, 5).Value = ERP_NO_REV
+    editing_wb.Worksheets(1).Cells(LastRow, 6).Value = 1
+    editing_wb.Worksheets(1).Cells(LastRow, 7).Value = MATERIAL
+    editing_wb.Worksheets(1).Cells(LastRow, 8).Value = WEIGHT
+    If InStr(DESCRIPTION, ";") > 0 Then
+        editing_wb.Worksheets(1).Cells(LastRow, 9).Value = Split(DESCRIPTION, ";")(0)
+        editing_wb.Worksheets(1).Cells(LastRow, 13).Value = Split(DESCRIPTION, ";")(1)
+    Else
+        editing_wb.Worksheets(1).Cells(LastRow, 9).Value = DESCRIPTION
+    End If
+End Sub
+Sub Export_png_and_step(ByVal input_ref As VPMReference, ByVal IsNotRoot As Boolean, ByVal MYPath As String)
+                
+        Dim rev As String
+        rev = erp_no_from_ref(input_ref)
+        
+        Dim ime_id As String
+        ime_id = Split(rev, "-")(0)
+        rev = Split(rev, "-")(1)
+        
+        Dim Correct_Name As String
+        Correct_Name = title_from_ref(input_ref)
+        
+        Dim oSearchService As SearchService
+        Set oSearchService = CATIA.GetSessionService("Search")
+        
+        ' Define search criteria
+        Dim oDBSearch As DatabaseSearch
+        Set oDBSearch = oSearchService.DatabaseSearch
+        
+        If IsNotRoot Then
+            oDBSearch.BaseType = "VPMReference"
+            oDBSearch.AddEasyCriteria "PLM_ExternalID", ime_id
+            oDBSearch.AddEasyCriteria "revision", rev
+            oDBSearch.LatestVersion = 1
+            oSearchService.Search
+            Set oSearchResults = oDBSearch.Results
+            openFromSearch oSearchResults.Item(1)
+        End If
+        
+        Dim MyViewer ' As Viewer
+        Dim bkcolor(2)
+        Dim bkcolor2
+        
+        bkcolor2 = Array(1, 1, 1)
+        
+        Set MyViewer = CATIA.ActiveWindow.activeviewer
+        
+        Call MyViewer.GetBackgroundColor(bkcolor)
+        Call MyViewer.PutBackgroundColor(bkcolor2)
+        
+        MyViewer.Reframe
+        IsFullScreen = MyViewer.FullScreen
+        
+        Call MyViewer.CaptureToFile(catCaptureFormatBMP, MYPath & "\" & Correct_Name & ".bmp")
+        
+        RunPython "0", MYPath, Correct_Name
+        
+        MyViewer.PutBackgroundColor bkcolor
+        'Debug.Print "VPMRepReference: " & VBA.Left(RepRef.Name, 9)
+        'Debug.Print "Object type: " & RepRef.GetCustomType
+        
+        Set oVPMRootOccOnRoot2 = RootOccFromEditor()
+        
+        Dim RepOccs As VPMRepOccurrences
+        Set RepOccs = oVPMRootOccOnRoot2.RepOccurrences
+        
+        For j = 1 To RepOccs.Count
+        
+            Dim Occ As VPMRepOccurrence
+            Set Occ = RepOccs.Item(j)
+        
+            Dim RepInst As VPMRepInstance
+            Set RepInst = Occ.RelatedRepInstance
+            
+            Dim RepRef As VPMRepReference
+            Set RepRef = RepInst.ReferenceInstanceOf
+            
+            'Debug.Print "V_Name: " + RepRef.GetAttributeValue("V_Name")
+            
+            If RepRef.GetCustomType = "Drawing" Then
+                Dim oSearchService2 As SearchService
+                Set oSearchService2 = CATIA.GetSessionService("Search")
+        
+                ' Define search criteria
+                Dim oDBSearch2 As DatabaseSearch
+                Set oDBSearch2 = oSearchService2.DatabaseSearch
+                'Debug.Print "VPMRepReference: " & VBA.Left(RepRef.Name, 9)
+                
+                oDBSearch2.BaseType = "Drawing"
+                oDBSearch2.AddEasyCriteria "PLM_ExternalID", VBA.Left(RepRef.Name, 9)
+                oDBSearch2.LatestVersion = 1
+                oSearchService2.Search
+                Set oSearchResults = oDBSearch2.Results
+                openFromSearch oSearchResults.Item(1)
+                Dim pos1 As Integer
+                pos1 = InStr(RepRef.GetAttributeValue("V_Name"), "DWG")
+                Dim pos2 As Integer
+                pos2 = InStr(RepRef.GetAttributeValue("V_Name"), "DXF")
+                If pos1 > 0 Then
+                    RunPython "1", MYPath, Correct_Name
+                ElseIf pos2 > 0 Then
+                    RunPython "2", MYPath, Correct_Name
+                Else
+                    RunPython "1", MYPath, Correct_Name
+                End If
+                Dim oWindow2 As Window
+                Set oWindow2 = CATIA.ActiveWindow
+                oWindow2.Close
+            End If
+        Next j
+        
+        If IsNotRoot Then
+            Dim oWindow As Window
+            Set oWindow = CATIA.ActiveWindow
+            oWindow.Close
+        End If
+    
+End Sub
+
+Sub edit_excel(ByVal editing_wb As Workbook)
+
+ '   Dim koe As Integer
+    
+    Dim sklop As New Collection
+    Dim sifra As New Collection
+    Dim ime_sifra As New Collection
+    Dim kolicina_sklopa As New Collection
+    Dim pozicije As New Collection
+    
+    LastRow = editing_wb.Worksheets(1).Cells(Rows.Count, 1).End(xlUp).Row
+    
+    For i = 8 To LastRow
+            
+        
+            If editing_wb.Worksheets(1).Cells(i - 1, 2).Value < editing_wb.Worksheets(1).Cells(i, 2).Value Then
+                sklop.Add editing_wb.Worksheets(1).Cells(i, 2).Value
+                sifra.Add editing_wb.Worksheets(1).Cells(i - 1, 4).Value
+                ime_sifra.Add editing_wb.Worksheets(1).Cells(i - 1, 3).Value
+                kolicina_sklopa.Add editing_wb.Worksheets(1).Cells(i - 1, 6).Value
+                pozicije.Add 10
+                
+                LastRow2 = editing_wb.Worksheets(2).Cells(Rows.Count, 5).End(xlUp).Row
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 3).Value = editing_wb.Worksheets(1).Cells(i, 12).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 5).NumberFormat = "@"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 5).Value = "00" & sifra(sifra.Count)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 6).NumberFormat = "@"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 6).Value = ime_sifra(ime_sifra.Count)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 8).Value = kolicina_sklopa(kolicina_sklopa.Count)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 9).Value = "pce"
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 10).Value = editing_wb.Worksheets(1).Cells(i, 5).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 11).Value = pozicije(pozicije.Count)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 12).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 12).Value = 1
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 14).NumberFormat = "@"
+                
+                If VBA.Left(editing_wb.Worksheets(1).Cells(i, 4).Value, 1) = "s" Then
+                    editing_wb.Worksheets(2).Cells(LastRow2 + 1, 14).Value = editing_wb.Worksheets(1).Cells(i, 4).Value
+                Else
+                    editing_wb.Worksheets(2).Cells(LastRow2 + 1, 14).Value = "00" & editing_wb.Worksheets(1).Cells(i, 4).Value
+                End If
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 15).Value = editing_wb.Worksheets(1).Cells(i, 3).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 16).Value = editing_wb.Worksheets(1).Cells(i, 6).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 17).Value = "pce"
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 19).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 19).Value = 0
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 20).Value = Now
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 20).Value = DateAdd("yyyy", 20, Now)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 21).Value = "No"
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 22).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 22).Value = 0
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 23).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 23).Value = 0
+                
+                
+            ElseIf editing_wb.Worksheets(1).Cells(i - 1, 2).Value > editing_wb.Worksheets(1).Cells(i, 2).Value Then
+                razlika = editing_wb.Worksheets(1).Cells(i - 1, 2).Value - editing_wb.Worksheets(1).Cells(i, 2).Value
+                For u = 1 To razlika
+                    sklop.Remove (sklop.Count)
+                    sifra.Remove (sifra.Count)
+                    pozicije.Remove (pozicije.Count)
+                    ime_sifra.Remove (ime_sifra.Count)
+                    kolicina_sklopa.Remove (kolicina_sklopa.Count)
+                Next u
+                                
+                pozicija = pozicije(pozicije.Count) + 10
+                pozicije.Remove (pozicije.Count)
+                pozicije.Add pozicija
+                
+                LastRow2 = editing_wb.Worksheets(2).Cells(Rows.Count, 5).End(xlUp).Row
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 3).Value = editing_wb.Worksheets(1).Cells(i, 12).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 5).NumberFormat = "@"
+                If VBA.Left(editing_wb.Worksheets(1).Cells(i, 4).Value, 1) = "s" Then
+                    editing_wb.Worksheets(2).Cells(LastRow2 + 1, 14).Value = editing_wb.Worksheets(1).Cells(i, 4).Value
+                Else
+                    editing_wb.Worksheets(2).Cells(LastRow2 + 1, 14).Value = "00" & editing_wb.Worksheets(1).Cells(i, 4).Value
+                End If
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 6).NumberFormat = "@"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 6).Value = ime_sifra(ime_sifra.Count)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 8).Value = kolicina_sklopa(kolicina_sklopa.Count)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 9).Value = "pce"
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 10).Value = editing_wb.Worksheets(1).Cells(i, 5).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 11).Value = pozicije(pozicije.Count)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 12).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 12).Value = 1
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 14).NumberFormat = "@"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 14).Value = "00" & editing_wb.Worksheets(1).Cells(i, 4).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 15).Value = editing_wb.Worksheets(1).Cells(i, 3).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 16).Value = editing_wb.Worksheets(1).Cells(i, 6).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 17).Value = "pce"
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 19).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 19).Value = 0
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 20).Value = Now
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 20).Value = DateAdd("yyyy", 20, Now)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 21).Value = "No"
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 22).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 22).Value = 0
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 23).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 23).Value = 0
+                
+            Else
+                pozicija = pozicije(pozicije.Count) + 10
+                pozicije.Remove (pozicije.Count)
+                pozicije.Add pozicija
+                LastRow2 = editing_wb.Worksheets(2).Cells(Rows.Count, 5).End(xlUp).Row
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 3).Value = editing_wb.Worksheets(1).Cells(i, 12).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 5).NumberFormat = "@"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 5).Value = "00" & sifra(sifra.Count)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 6).NumberFormat = "@"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 6).Value = ime_sifra(ime_sifra.Count)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 8).Value = kolicina_sklopa(kolicina_sklopa.Count)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 9).Value = "pce"
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 10).Value = editing_wb.Worksheets(1).Cells(i, 5).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 11).Value = pozicije(pozicije.Count)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 12).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 12).Value = 1
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 14).NumberFormat = "@"
+                If VBA.Left(editing_wb.Worksheets(1).Cells(i, 4).Value, 1) = "s" Then
+                    editing_wb.Worksheets(2).Cells(LastRow2 + 1, 14).Value = editing_wb.Worksheets(1).Cells(i, 4).Value
+                Else
+                    editing_wb.Worksheets(2).Cells(LastRow2 + 1, 14).Value = "00" & editing_wb.Worksheets(1).Cells(i, 4).Value
+                End If
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 15).Value = editing_wb.Worksheets(1).Cells(i, 3).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 16).Value = editing_wb.Worksheets(1).Cells(i, 6).Value
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 17).Value = "pce"
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 19).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 19).Value = 0
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 20).Value = Now
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 20).Value = DateAdd("yyyy", 20, Now)
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 21).Value = "No"
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 22).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 22).Value = 0
+                
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 23).NumberFormat = "0.00"
+                editing_wb.Worksheets(2).Cells(LastRow2 + 1, 23).Value = 0
+                
+            End If
+
+    Next i
+    
+    Dim unikati As New Collection
+
+    
+    For i = 7 To LastRow
+    
+        If IsNumeric(VBA.Left(editing_wb.Worksheets(1).Cells(i, 4).Value, 1)) Then
+        
+            ime = editing_wb.Worksheets(1).Cells(i, 3).Value
+            index_nadjenog = 0
+            LastRow3 = editing_wb.Worksheets(3).Cells(Rows.Count, 8).End(xlUp).Row
+            
+            For k = 1 To LastRow3
+                If editing_wb.Worksheets(3).Cells(k, 8).Value = ime Then
+                    index_nadjenog = k
+                End If
+            Next k
+        
+            If index_nadjenog > 0 Then
+                'koe = izracunaj_kolicinu(editing_wb, LastRow, i)
+                'editing_wb.Worksheets(3).Cells(index_nadjenog, 26).Value = _
+                    'editing_wb.Worksheets(3).Cells(index_nadjenog, 26).Value + koe * editing_wb.Worksheets(1).Cells(i, 6).Value
+                    
+            Else
+                editing_wb.Worksheets(3).Cells(LastRow3 + 1, 6).NumberFormat = "@"
+                editing_wb.Worksheets(3).Cells(LastRow3 + 1, 6).Value = "00" & editing_wb.Worksheets(1).Cells(i, 4).Value
+                
+                editing_wb.Worksheets(3).Cells(LastRow3 + 1, 7).Value = editing_wb.Worksheets(1).Cells(i, 3).Value
+                editing_wb.Worksheets(3).Cells(LastRow3 + 1, 11).Value = editing_wb.Worksheets(1).Cells(i, 3).Value
+                editing_wb.Worksheets(3).Cells(LastRow3 + 1, 8).Value = "Tool"
+                editing_wb.Worksheets(3).Cells(LastRow3 + 1, 30).Value = 100
+                editing_wb.Worksheets(3).Cells(LastRow3 + 1, 31).Value = "pce"
+                editing_wb.Worksheets(3).Cells(LastRow3 + 1, 32).Value = "g"
+                editing_wb.Worksheets(3).Cells(LastRow3 + 1, 33).Value = editing_wb.Worksheets(1).Cells(i, 8).Value
+
+                
+            End If
+        End If
+    Next i
+    
+    LastRow = editing_wb.Worksheets(1).Cells(Rows.Count, 1).End(xlUp).Row
+    editing_wb.Worksheets(1).Range(editing_wb.Worksheets(1).Cells(7, 1), editing_wb.Worksheets(1).Cells(LastRow, 13)).Borders.LineStyle = xlContinuous
+    editing_wb.Worksheets(1).Range(editing_wb.Worksheets(1).Cells(7, 1), editing_wb.Worksheets(1).Cells(LastRow, 13)).Borders.Color = vbBlack
+    editing_wb.Worksheets(1).Range(editing_wb.Worksheets(1).Cells(7, 1), editing_wb.Worksheets(1).Cells(LastRow, 13)).Borders.WEIGHT = xlThin
+    editing_wb.Worksheets(1).Range(editing_wb.Worksheets(1).Cells(7, 1), editing_wb.Worksheets(1).Cells(LastRow, 13)).WrapText = True
+    
+    editing_wb.Worksheets(2).Range("A1:Y1").Interior.Color = RGB(153, 51, 0)
+    editing_wb.Worksheets(2).Range("A1:Y1").Font.Color = RGB(255, 255, 255)
+    editing_wb.Worksheets(2).Range("A1:Y1").AutoFilter
+    editing_wb.Worksheets(2).Range("A:C").EntireColumn.Hidden = True
+    
+    editing_wb.Worksheets(3).Range("A1:K1").Interior.Color = RGB(255, 255, 0)
+    editing_wb.Worksheets(3).Range("A1:K1").Font.Color = RGB(153, 51, 0)
+    editing_wb.Worksheets(3).Range("A1:K1").AutoFilter
+    editing_wb.Worksheets(3).Range("A:C").EntireColumn.Hidden = True
+    
+    
+    
+End Sub
+
+Function izracunaj_kolicinu(ByVal editing_wb As Workbook, ByVal LastRow As Integer, ByVal index_provjere As Integer)
+
+        koe = 1
+        co = editing_wb.Worksheets(1).Cells(index_provjere, 2).Value
+        If index_provjere > 7 Then
+            For j = 1 To index_provjere - 7
+                If editing_wb.Worksheets(1).Cells(index_provjere - j, 2).Value < co Then
+                    koe = koe * editing_wb.Worksheets(1).Cells(index_provjere - j, 6).Value
+                    co = editing_wb.Worksheets(1).Cells(index_provjere - j, 2).Value
+                End If
+            Next j
+        End If
+
+    
+    izracunaj_kolicinu = koe
+End Function
+
+
+Function drawing(ByVal VPMOcc As VPMOccurrence)
+    Dim Object_type_col As New Collection
+        
+    For j = 1 To VPMOcc.RepOccurrences.Count
+        
+        Dim RepOcc As VPMRepOccurrence
+        Set RepOcc = VPMOcc.RepOccurrences.Item(j)
+    
+        Dim RepInst As VPMRepInstance
+        Set RepInst = RepOcc.RelatedRepInstance
+            
+        Dim RepRef As VPMRepReference
+        Set RepRef = RepInst.ReferenceInstanceOf
+            
+        'Debug.Print "VPMRepReference: " & RepRef.Name
+        'Debug.Print "Object type: " & RepRef.GetCustomType
+            
+        If RepRef.GetCustomType = "Drawing" Then
+            Object_type_col.Add (RepRef.GetCustomType)
+        End If
+            
+    Next j
+        
+    drawing = InCollection(Object_type_col, "Drawing")
+End Function
+
+
+Function title_from_ref(ByVal input_ref As VPMReference)
+
+        Dim ime_all As String
+        ime_all = input_ref.Name
+        
+        If VBA.Left(ime_all, 1) = "s" Then
+            x = 10
+        Else
+            x = 9
+        End If
+        
+        Dim title As String
+        title = input_ref.GetAttributeValue("V_Name")
+        
+        Dim ime_rev As String
+        ime_rev = VBA.Mid(ime_all, x + 1)
+        
+        Dim ime_id As String
+        ime_id = VBA.Left(ime_all, x)
+        
+        Dim rev As String
+        rev = VBA.Left(ime_rev, Len(ime_rev) - 1) & "." & VBA.Right(ime_all, 1)
+        
+        Dim Correct_Name As String
+        Correct_Name = ime_id & "-" & rev & " " & title
+        
+        title_from_ref = Correct_Name
+End Function
+
+Function erp_no_from_ref(ByVal input_ref As VPMReference)
+
+        Dim ime_all As String
+        ime_all = input_ref.Name
+        
+        If VBA.Left(ime_all, 1) = "s" Then
+            x = 10
+        Else
+            x = 9
+        End If
+        
+        Dim ime_rev As String
+        ime_rev = VBA.Mid(ime_all, x + 1)
+        
+        Dim ime_id As String
+        ime_id = VBA.Left(ime_all, x)
+        
+        Dim rev As String
+        rev = VBA.Left(ime_rev, Len(ime_rev) - 1) & "." & VBA.Right(ime_all, 1)
+        
+        Dim Correct_Name As String
+        Correct_Name = ime_id & "-" & rev
+        
+        erp_no_from_ref = Correct_Name
+        
+End Function
+
+Function InCollection(coll As Collection, strKey As String) As Boolean
+    InCollection = False
+    For i = 1 To coll.Count
+        If coll(i) = strKey Then
+            InCollection = True
+            Exit Function
+        End If
+    Next
+End Function
+
+Sub openFromSearch(ByVal inputPLMEntity As PLMEntity)
+    'Fetch PLMOpenService
+    
+    Dim oOpenService As PLMOpenService
+    Set oOpenService = CATIA.GetSessionService("PLMOpenService")
+    
+    Dim oEditor As Editor
+    oOpenService.PLMOpen inputPLMEntity, oEditor
+    
+    'Open first entity
+End Sub
+
+Sub RunPython(ByVal extension As String, ByVal path As String, ByVal CN As String)
+    Dim objShell As Object
+    Dim PS As String
+        Set objShell = VBA.CreateObject("Wscript.Shell")
+        Dim waitOnReturn As Boolean: waitOnReturn = True
+        Dim windowStyle As Integer: windowStyle = 1
+        PS1 = """C:\Users\zvonimir.leljak\Documents\python\skripte\exportto\ExportingPy.py"""
+        PS2 = """C:\Users\" & Environ("username") & "\Documents\Zvone_Skripta\ExportingPy.exe"""
+        PS3 = """S:\Manufacturing Engineering\Internal\MIS\Zvone_Skripta\ExportingPy.exe"""
+        On Error GoTo PS2folder
+            objShell.Run PS1 & " " & extension & " " & path & " " & "delimiter_za_pajton_skriptu_01010101" & " " & CN, windowStyle, waitOnReturn
+            Exit Sub
+PS2folder:
+        On Error GoTo PS3folder
+            objShell.Run PS2 & " " & extension & " " & path & " " & "delimiter_za_pajton_skriptu_01010101" & " " & CN, windowStyle, waitOnReturn
+            Exit Sub
+PS3folder:
+            objShell.Run PS3 & " " & extension & " " & path & " " & "delimiter_za_pajton_skriptu_01010101" & " " & CN, windowStyle, waitOnReturn
+            Exit Sub
+    End Sub
+
+Function RootOccFromEditor()
+    Dim openEditor As Editor
+    Set openEditor = CATIA.ActiveEditor
+    
+    Dim oProductService As PLMProductService
+    Set oProductService = openEditor.GetService("PLMProductService")
+    
+    Dim oVPMRootOccOnRoot As VPMRootOccurrence
+    Set oVPMRootOccOnRoot = oProductService.RootOccurrence
+    
+    Set RootOccFromEditor = oVPMRootOccOnRoot
+End Function
+
+Function GetSearch()
+    Dim oSearchService As SearchService
+    Set oSearchService = CATIA.GetSessionService("Search")
+        
+        ' Define search criteria
+    Dim oDBSearch As DatabaseSearch
+    Set oDBSearch = oSearchService.DatabaseSearch
+    
+    Set GetSearch = oDBSearch
+End Function
+
+Function GetSearchService()
+    Dim oSearchService As SearchService
+    Set oSearchService = CATIA.GetSessionService("Search")
+    Set GetSearchService = oSearchService
+End Function
+
+
