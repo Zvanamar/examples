@@ -1,0 +1,182 @@
+import time
+from selenium import webdriver
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
+from bs4 import BeautifulSoup
+import os
+from os import listdir
+from os.path import isfile, join
+import pyautogui
+import openpyxl
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+
+SLIKE=['.jpg','.JPG','.bmp','.BMP','.jpeg','.JPEG']
+kategorija='TLS04'
+mypath0 = input("Folder path: ")
+
+mypath=os.path.normpath(mypath0)
+
+onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
+##print(onlyfiles)
+of1=[]
+for i in onlyfiles:
+    for k in SLIKE:
+        
+        if i[-4:]==k:
+            print(i[-4:])
+            of1.append(i[:-4])
+
+print('treba ubaciti:', len(of1))
+
+for i in onlyfiles:
+    if i[-9:]=='_SUP.xlsx':
+        SUP_FILE=i
+
+def click_uporno(driver,strstr):
+    try:
+        driver.find_element_by_xpath(strstr).click()
+    except Exception as e:
+        time.sleep(5)
+        print(e)
+        click_uporno(driver,strstr)
+        
+def provjera_ime(x,y,z):
+    
+    delay =120 # seconds
+    try:
+        myElem = WebDriverWait(driver, delay).until(EC.presence_of_element_located((x, y)))
+        print(z)
+        return 1
+    except TimeoutException:
+        print ("Loading took too much time!")
+
+profile = webdriver.FirefoxProfile()
+profile.accept_untrusted_certs = True
+driver = webdriver.Firefox(firefox_profile=profile)
+##op = webdriver.ChromeOptions()
+##"excludeSwitches",
+##op.add_experimental_option( ["enable-logging"])
+##op.add_argument('--ignore-certificate-errors')
+##op.add_argument('headless')
+##op.add_argument('--no-sandbox')
+##driver = webdriver.Chrome(ChromeDriverManager().install(),options=op)
+##driver = webdriver.Chrome('C:/Users/zvonimir.leljak/Documents/python/p/chromedriver.exe',options=op)
+driver.get('https://rimac.odoo.eur.hr:8010/?db=rimac&ts=1626071331623#page=0&limit=80&view_type=list&model=product.product&menu_id=3220&action=114')
+provjera_ime(By.NAME,'login','- Našao login stranicu! -')
+bsObj = BeautifulSoup(driver.page_source,'html.parser')
+username = driver.find_element_by_name("login")
+username.clear()
+username.send_keys("zvonimir.leljak")
+username = driver.find_element_by_name("password")
+username.clear()
+username.send_keys("Concept06!")
+driver.find_element_by_name("submit").click()
+provjera_ime(By.XPATH,"//*[@class='oe_list_field_cell oe_list_field_char    oe_required undefined ']",'- Ušao u ERP! -')
+time.sleep(5)
+driver.find_element_by_xpath("//*[@class='oe_button oe_list_add oe_highlight']").click()
+
+broj=1
+
+for i in of1:
+    
+    of2=[]
+    for l in onlyfiles:
+        v=0
+        for r in i:
+            if r==l[v]:
+                v+=1
+        if len(i)==v:
+            of2.append(l)
+    for l in of2:
+        for k in SLIKE:
+            if l[-4:]==k:
+                SLIKA=k
+                of2.remove(l)
+           
+        if l[-9:]=='_SUP.xlsx':
+            of2.remove(l)
+        
+    print(of2)
+    time.sleep(1)
+    provjera_ime(By.XPATH,"//*[@class='oe_form_field_image_controls oe_edit_only']",'- Ušao u stvaranje indenta! -')
+
+    driver.find_element_by_xpath("//div[@class='oe_form_field_image_controls oe_edit_only']/div/form/input[@name='ufile']")\
+        .send_keys(mypath0+'\\'+i+SLIKA)
+    time.sleep(0.5)
+    provjera_ime(By.XPATH,"//*[@class='oe_title']",'- Uploadao sliku! -')
+    driver.find_element_by_xpath("//input[@id='oe-field-input-26']")\
+        .send_keys(i)
+    time.sleep(0.5)
+    driver.find_element_by_xpath("//input[@id='oe-field-input-27']")\
+        .send_keys(kategorija)
+    
+    time.sleep(0.5)
+    pyautogui.press('down')
+    time.sleep(0.5)
+    pyautogui.press('enter')
+    time.sleep(1)
+    driver.find_element_by_xpath("//input[@id='oe-field-input-33']")\
+        .send_keys('kom')
+    time.sleep(0.5)
+    pyautogui.press('down')
+    time.sleep(0.5)
+    pyautogui.press('enter')
+    driver.find_element_by_xpath("//div[@class='oe_form_field oe_form_field_text oe_form_field_translatable']/textarea[@class='field_text']")\
+        .send_keys(i)
+    click_uporno(driver,"//*[@class='oe_button oe_form_button_save oe_highlight']")
+    provjera_ime(By.XPATH,"//div[@class='oe_formview oe_view oe_form_readonly']",'- Zapocinjem dodavanje privitaka -')
+    time.sleep(2)
+    aa=2
+    for j in of2:
+        pp=0
+        while pp==0:
+            print(j)
+            provjera_ime(By.XPATH,"//div[@class='oe_view_manager_sidebar']/div[2]/div/div[2]/ul/li[%d]"%(aa-1),'- Našao listu privitaka, broj privitaka:%d! -'%(aa-2))
+            driver.find_element_by_xpath("//div[@class='oe_view_manager_sidebar']/div[2]/div/div/ul/li/div/form/input[@class='oe_form_binary_file']")\
+                .send_keys(mypath0+'\\'+j)
+            pp=provjera_ime(By.XPATH,"//div[@class='oe_view_manager_sidebar']/div[2]/div/div[2]/ul/li[%d]"%aa,'- Uploadao privitak, broj privitaka:%d! -'%(aa-1))
+
+        aa+=1
+
+    provjera_ime(By.XPATH,"//*[@class='oe_button oe_form_button_edit']",'- Zapocinjem edit ERP broja -')
+    time.sleep(1)
+    driver.find_element_by_xpath("//*[@class='oe_button oe_form_button_edit']").click()
+    driver.find_element_by_xpath("//input[@id='oe-field-input-41']").clear()
+    driver.find_element_by_xpath("//input[@id='oe-field-input-41']").send_keys(i[:i.find(' ')])
+    time.sleep(0.5)
+    provjera_ime(By.XPATH,"//*[@class='oe_button oe_form_button_save oe_highlight']",'- Pronašao save button')
+    
+    provjera_ime(By.XPATH,"//*[@class='ui-dialog ui-widget ui-widget-content ui-corner-all ui-draggable ui-resizable ui-dialog-buttons openerp']",'- Pronašao widget obavijesti -')
+    time.sleep(1)
+    pyautogui.press('enter')
+    click_uporno(driver,"//*[@class='oe_button oe_form_button_save oe_highlight']")
+    provjera_ime(By.XPATH,"//div[@class='oe_formview oe_view oe_form_readonly']",'- Indent saved -')
+    
+    wb = openpyxl.load_workbook(mypath0+'\\'+SUP_FILE)
+    sheets = wb.sheetnames
+    Sheet1 = wb[sheets[0]]
+    Sheet1.cell(row = 12+broj-1, column = 1).value = broj 
+    Sheet1.cell(row = 12+broj-1, column = 2).value = '?'
+    Sheet1.cell(row = 12+broj-1, column = 3).value = i
+    Sheet1.cell(row = 12+broj-1, column = 4).value = i[:i.find(' ')]
+    Sheet1.cell(row = 12+broj-1, column = 5).value = '?'
+    Sheet1.cell(row = 12+broj-1, column = 6).value = '?'
+    Sheet1.cell(row = 12+broj-1, column = 7).value = '?'
+    wb.save(mypath0+'\\'+SUP_FILE) 
+
+    if broj!=len(of1):
+        click_uporno(driver,"//button[@class='oe_button oe_form_button_create']")
+    else:
+        print('-- SKRIPTA ZAVRŠILA, KREIRANO %d indenata --'%broj)
+    broj+=1
+
+
+
+
+
+
+
+
